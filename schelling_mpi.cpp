@@ -106,10 +106,10 @@ City::City(const int newsize_x, const int newsize_y, const double newcoeff, cons
     left_neighbour_border = (House *)malloc(size_y * sizeof(House));
     right_neighbour_border = (House *)malloc(size_y * sizeof(House));
     
-    std::default_random_engine generator;
+    std::default_random_engine generator(std::random_device{}());
     std::uniform_int_distribution<int> distribution(0, 1);
     
-    generator.seed(clock());
+//     generator.seed(clock());
     
     for (int i = 0; i < size_y; ++i)
     {
@@ -294,10 +294,10 @@ void City::Swap(const int first_ind, const int sec_ind)
 // Fisher-Yates shuffle
 void City::LocalShuffle(const int count)
 {
-    std::default_random_engine generator;
+    std::default_random_engine generator(std::random_device{}());
     std::uniform_int_distribution<int> distribution(0, count - 1);
 
-    generator.seed(clock());
+//     generator.seed(clock());
 
     
     for (int k = 0; k < count; ++k)
@@ -321,13 +321,13 @@ void City::Shuffle()
     double randval;
     int * new_counts;
 //     int * new_labeled_counts;
-    int max_tries = 1000;
+    const int max_tries = 10000;
     int n_tries = 0;
     int remainder;
     int n_houses;
     
-    std::default_random_engine generator_2;
-    generator_2.seed(clock());
+    std::default_random_engine generator_2(std::random_device{}());
+//     generator_2.seed(clock());
 
 
     
@@ -379,7 +379,9 @@ void City::Shuffle()
             p_labeled = double(total_labeled_wantmove)/double(total_wantmove);
         }
         else
-        {printf("Everyone is good! \n");}
+        {
+            //printf("Everyone is good! \n");            
+        }
     }
     
     // Now I want to split the tenants between cores
@@ -391,6 +393,11 @@ void City::Shuffle()
     
     if (my_rank == 0)
     {
+//         for (int i=0; i<psize; i++)
+//         {
+//             printf("%d of %d \n", wantmove_ones_counts[i], wantmove_counts[i]);
+//         }
+        printf("\n");
         while(n_tries < max_tries)
         {
             n_tries++;
@@ -410,15 +417,16 @@ void City::Shuffle()
 //             }
 //             printf("\n");
             
-            if (remainder < wantmove_counts[psize - 1])
+            if (remainder <= wantmove_counts[psize - 1])
             {
-                printf("Success \n");
+//                 printf("Success \n");
+//                 printf("");
                 break;
             } else {
-                if (n_tries % 20 == 0)
-                {
-                printf("Invalid configuration, retrying...\n");
-                }
+//                 if (n_tries % 500 == 0)
+//                 {
+//                 printf("Invalid configuration, retrying...\n");
+//                 }
             }
         }
         if (n_tries == max_tries)
@@ -433,7 +441,7 @@ void City::Shuffle()
     // repaint all who want to move
     // first new_counts[i] are labeled, the rest are unlabeled
     
-//     printf("Rank %d, Wantmove count %d, new_count %d \n", my_rank, count_wantmove, new_counts[my_rank]);
+//     printf("Rank %d, Wantmove %d, New labeled %d \n", my_rank, count_wantmove, new_counts[my_rank]);
     
     for (int i=0; i<count_wantmove; i++)
     {
@@ -445,8 +453,12 @@ void City::Shuffle()
         }
     }
     
-    LocalShuffle(count_wantmove);
+//     printf("Rank %d, labeled wantmove %d -> %d \n",  my_rank, 
+//            count_wantmove_label_one, new_counts[my_rank]);
     
+    LocalShuffle(count_wantmove);
+    UpdateBorders();
+
     
     
     
@@ -500,7 +512,6 @@ void City::Shuffle()
     
     
     
-    UpdateBorders();
     
 }
 
@@ -542,7 +553,7 @@ void City::FileDump(const int iteration)
 void City::Print()
 {
     //printf("I'm a part of the city with rank %d out of %d \n", my_rank, psize - 1);
-    printf("My map is: \n");
+//     printf("My map is: \n");
     for (int i = 0; i<size_y; i++)
     {
         for (int j=0; j<size_x; j++)
@@ -571,16 +582,16 @@ void City::Print()
 //         }
 //         printf("\n");
 //       }
-    
-    if (my_rank < psize - 1)
-    {
-        printf("My right neighbour's border is: \n");
-        for (int i=0; i<size_y; i++)
-        {
-            printf("%d ", right_neighbour_border[i].status);
-        }
-        printf("\n");	     
-    }
+//     
+//     if (my_rank < psize - 1)
+//     {
+//         printf("My right neighbour's border is: \n");
+//         for (int i=0; i<size_y; i++)
+//         {
+//             printf("%d ", right_neighbour_border[i].status);
+//         }
+//         printf("\n");	     
+//     }
     
     // printf("My wantmove list is: \n");
     // for (int i=0; i<count_wantmove; i++)
@@ -589,7 +600,7 @@ void City::Print()
     //   }
     // printf(", %d in total \n", count_wantmove);
     // printf("Among them %d are labeled one\n", count_wantmove_label_one);
-    printf("=============\n");
+//     printf("=============\n");
 }
 
 void City::SendBordersL2R()
@@ -685,11 +696,18 @@ int main(int argc, char ** argv)
     city.SendBordersR2L();
     MPI_Barrier(MPI_COMM_WORLD);
     
-    if (prank==0)
+    if (prank == 0)
     {
-        printf("Round 0, city block %d\n", prank);
+        printf("Round %d, city block %d\n", 0, prank);
         city.Print();
     }
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (prank == 1)
+    {
+        printf("Round %d, city block %d\n", 0, prank);
+        city.Print();
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
     
     for (int n=1; n<iter; n++)
     {
@@ -704,21 +722,31 @@ int main(int argc, char ** argv)
         MPI_Barrier(MPI_COMM_WORLD);
         
 
-        // for (int i=0; i<psize; i++)
-        //   {
-        //     if (prank==i)
-        //       {
-        //         printf("Round %d, city block %d\n", n, prank);
-        //         city.Print();
-        //       }
-        //     MPI_Barrier(MPI_COMM_WORLD);
-        //   }
-        if (prank==0)
+//         for (int i=0; i<psize; i++)
+//           {
+//             if (prank==i)
+//               {
+//                 printf("Round %d, city block %d\n", n, prank);
+//                 city.Print();
+//               }
+//             MPI_Barrier(MPI_COMM_WORLD);
+//           }
+        
+        if (prank == 0 && n % 2 == 0)
         {
             printf("Round %d, city block %d\n", n, prank);
             city.Print();
         }
+        MPI_Barrier(MPI_COMM_WORLD);
+//         if (prank == 1 && n % 2 == 0)
+//         {
+//             printf("Round %d, city block %d\n", n, prank);
+//             city.Print();
+//         }
+//         MPI_Barrier(MPI_COMM_WORLD);
     }
+    
+    
     
     MPI_Finalize();		
     
