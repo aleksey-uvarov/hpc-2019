@@ -10,10 +10,10 @@ return EXIT_FAILURE;}} while(0)
 
 __global__ void setup_kernel(curandState *state)
 {
-    int id = threadIdx.x + blockIdx.x * 64;
+    int id = threadIdx.x + blockIdx.x * blockDim.x;
     /* Each thread gets same seed, a different sequence 
      *       number, no offset */
-    curand_init(1234, id, 0, &state[id]);
+    curand_init(345893, id, 0, &state[id]);
 }
 
 
@@ -21,7 +21,7 @@ __global__ void generate_uniform_kernel(curandState *state,
                                         int n_points_per_thread, 
                                         int *result)
 {
-    int id = threadIdx.x + blockIdx.x * 64;
+    int id = threadIdx.x + blockIdx.x * blockDim.x;
     int count = 0;
     float x;
     float y;
