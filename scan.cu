@@ -19,25 +19,47 @@ __global__ void prepare_function(float * d_out, int n_points,
 }
 
 
-__global__ void blelloch_reduce(float * d_in, int n_points)
+// __global__ void blelloch_reduce(float * d_in, int n_points)
+// {
+//     /* Assuming n_points is a power of two */
+//     int n_current = 2;
+//     int id = threadIdx.x + blockIdx.x * blockDim.x;
+//     
+//     while(n_current <= n_points)
+//     {
+//         if ((id + 1) % n_current == 0)
+//         {
+//             d_in[id] += d_in[id - n_current/2];
+//         }
+//         __syncthreads();
+//         n_current = n_current * 2;
+//     }
+//     
+// }
+
+
+__global__ void blelloch_reduce_step(float * d_in, int n_points, int stride_step)
 {
-    /* Assuming n_points is a power of two */
-    int n_current = 2;
     int id = threadIdx.x + blockIdx.x * blockDim.x;
-    
-    while(n_current <= n_points)
+    if ((id + 1) % stride_step == 0)
     {
-        if ((id + 1) % n_current == 0)
-        {
-            d_in[id] += d_in[id - n_current/2];
-        }
-        __syncthreads();
-        n_current = n_current * 2;
+        d_in[id] += d_in[id - stride_step/2];
     }
-    
 }
 
 
+__global__ void kill_last(float * d_in, int n_points)
+{
+    int id = threadIdx.x + blockIdx.x * blockDim.x;       
+   
+    if (id == n_points - 1)
+    {
+        d_in[id] = 0;
+    }
+}
+
+
+/*
 __global__ void blelloch_downsweep(float * d_in, int n_points)
 {
     int n_current = n_points;
@@ -61,21 +83,16 @@ __global__ void blelloch_downsweep(float * d_in, int n_points)
         n_current = n_current / 2;
         __syncthreads();
     }
-}
+}*/
+
+
 
 __global__ void blelloch_downsweep_step(float * d_in, int n_points, int stride_step)
 {
     
     int id = threadIdx.x + blockIdx.x * blockDim.x;       
     float tmp;
-
-    
-    if (id == n_points - 1 && stride_step == n_points)
-    {
-        d_in[id] = 0;
-    }
-    __syncthreads();
-    
+  
  
     if ((id + 1) % stride_step == 0)
     {
@@ -83,7 +100,7 @@ __global__ void blelloch_downsweep_step(float * d_in, int n_points, int stride_s
         d_in[id] += d_in[id - stride_step/2];
         d_in[id - stride_step/2] = tmp;
     }
-    __syncthreads();
+//     __syncthreads();
 }
 
 
@@ -91,15 +108,13 @@ int main(int argc, char* argv[])
 {
     float minus_infty = -8;
     float x_max = 0;
-    int n_blocks = 64;
+    int n_blocks = 1024;
     int n_points_per_block = 1024;
     int n_points = n_points_per_block * n_blocks;
-    int stride_step = n_points;
+    int stride_step;
     
     float dx;
     float *devFunVals;
-//     float *devScan;
-//     float *hostScan;
     float *hostFunVals;
     float *hostFunVals2;
     
@@ -132,18 +147,25 @@ int main(int argc, char* argv[])
     hostFunVals2 = (float *)calloc(n_points, sizeof(float));
     
     CUDA_CALL(cudaMalloc((void **)&devFunVals, n_points*sizeof(float)));
-    
-    
-//     CUDA_CALL(cudaMalloc((void **)&devScan, n_points*sizeof(float)));
+
     
     prepare_function<<<n_blocks, n_points_per_block>>>(devFunVals, n_points, minus_infty, x_max);
     
-    blelloch_reduce<<<n_blocks, n_points_per_block>>>(devFunVals, n_points);
+//     blelloch_reduce<<<n_blocks, n_points_per_block>>>(devFunVals, n_points);
+
+    stride_step = 2;
+    while(stride_step <= n_points)
+    {
+        blelloch_reduce_step<<<n_blocks, n_points_per_block>>>(devFunVals, n_points, stride_step);        
+        
+        stride_step = stride_step * 2;
+    }
+    stride_step = n_points;
+
     
     CUDA_CALL(cudaMemcpy(hostFunVals, devFunVals, n_points*sizeof(float), cudaMemcpyDeviceToHost));
     
-
-//     blelloch_downsweep<<<n_blocks, n_points_per_block>>>(devFunVals, n_points);
+    kill_last<<<n_blocks, n_points_per_block>>>(devFunVals, n_points);
     
     while(stride_step >= 2)
     {
@@ -166,7 +188,7 @@ int main(int argc, char* argv[])
 //     }
 //     printf("\n");
 //     printf("Func value: %1.5f\n", hostFunVals[n_points - 1]);
-    printf("Integral value: %1.5f\n", hostFunVals2[n_points - 1] * dx);
+    printf("Integral value: %1.5e\n", hostFunVals2[n_points - 1] * dx);
     
     
     
@@ -182,8 +204,8 @@ int main(int argc, char* argv[])
     free(hostFunVals);
     free(hostFunVals2);
 
-//     CUDA_CALL(cudaFree(devFunVals));
-//     CUDA_CALL(cudaFree(devScan));
+    CUDA_CALL(cudaFree(devFunVals));
+
 
     
     
